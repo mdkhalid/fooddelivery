@@ -6,6 +6,13 @@ export default defineConfig({
     environment: 'node',
     root: '.',
     include: ['tests/**/*.test.ts'],
+    env: {
+      NODE_ENV: 'test',
+      JWT_ACCESS_SECRET: 'test-access-secret-min-16-chars',
+      JWT_REFRESH_SECRET: 'test-refresh-secret-min-16-chars',
+      DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/fooddelivery_test',
+      REDIS_URL: 'redis://localhost:6379',
+    },
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
