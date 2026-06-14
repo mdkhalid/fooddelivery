@@ -43,9 +43,45 @@ const parsed = envSchema.safeParse(process.env);
 
 if (!parsed.success) {
   console.error('Invalid environment variables:', parsed.error.flatten().fieldErrors);
-  if (process.env.NODE_ENV !== 'test') {
-    process.exit(1);
-  }
+  if (process.env.NODE_ENV !== 'test') process.exit(1);
 }
 
-export const config = Object.freeze(parsed.data);
+// Use type assertion since we validated above
+const env = parsed.data!;
+
+export const config = Object.freeze({
+  NODE_ENV: env.NODE_ENV,
+  PORT: env.PORT,
+  HOST: env.HOST,
+  DATABASE_URL: env.DATABASE_URL,
+  REDIS_URL: env.REDIS_URL,
+  JWT_ACCESS_SECRET: env.JWT_ACCESS_SECRET,
+  JWT_REFRESH_SECRET: env.JWT_REFRESH_SECRET,
+  JWT_ACCESS_EXPIRES_IN: env.JWT_ACCESS_EXPIRES_IN,
+  JWT_REFRESH_EXPIRES_IN: env.JWT_REFRESH_EXPIRES_IN,
+  OTP_LENGTH: env.OTP_LENGTH,
+  OTP_EXPIRES_IN: env.OTP_EXPIRES_IN,
+  OTP_MAX_ATTEMPTS: env.OTP_MAX_ATTEMPTS,
+  BCRYPT_SALT_ROUNDS: env.BCRYPT_SALT_ROUNDS,
+  STRIPE_SECRET_KEY: env.STRIPE_SECRET_KEY,
+  STRIPE_WEBHOOK_SECRET: env.STRIPE_WEBHOOK_SECRET,
+  TWILIO_ACCOUNT_SID: env.TWILIO_ACCOUNT_SID,
+  TWILIO_AUTH_TOKEN: env.TWILIO_AUTH_TOKEN,
+  TWILIO_PHONE_NUMBER: env.TWILIO_PHONE_NUMBER,
+  SENDGRID_API_KEY: env.SENDGRID_API_KEY,
+  SENDER_EMAIL: env.SENDER_EMAIL,
+  S3_ENDPOINT: env.S3_ENDPOINT,
+  S3_BUCKET: env.S3_BUCKET,
+  S3_ACCESS_KEY: env.S3_ACCESS_KEY,
+  S3_SECRET_KEY: env.S3_SECRET_KEY,
+  S3_REGION: env.S3_REGION,
+  MAX_IMAGE_SIZE_MB: env.MAX_IMAGE_SIZE_MB,
+  IMAGE_QUALITY: env.IMAGE_QUALITY,
+  RATE_LIMIT_WINDOW_MS: env.RATE_LIMIT_WINDOW_MS,
+  RATE_LIMIT_MAX_REQUESTS: env.RATE_LIMIT_MAX_REQUESTS,
+  AUTH_RATE_LIMIT_MAX: env.AUTH_RATE_LIMIT_MAX,
+  OTP_RATE_LIMIT_MAX: env.OTP_RATE_LIMIT_MAX,
+  CORS_ORIGIN: env.CORS_ORIGIN,
+  LOG_LEVEL: env.LOG_LEVEL,
+});
+

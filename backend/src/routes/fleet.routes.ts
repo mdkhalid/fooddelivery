@@ -1,38 +1,25 @@
-import { Router, Request, Response } from 'express';
-import { asyncHandler } from '../middleware/asyncHandler';
+import { Router } from 'express';
 import { authenticate, authorize } from '../middleware/auth';
+import { validate } from '../middleware/validate';
+import * as schemas from '../validators/driver.validator';
+import { UserRole } from '@prisma/client';
 import { driverService } from '../services/driver.service';
 import { sendSuccess } from '../utils/response';
-import { validate } from '../middleware/validate';
-import { registerFleetSchema, addFleetDriverSchema } from '../validators/driver.validator';
-import { UserRole } from '@prisma/client';
 
 const router = Router();
 router.use(authenticate);
 
-// Registration
-router.post('/register', validate(registerFleetSchema), asyncHandler(async (req: Request, res: Response) => {
-  const fleet = await driverService.registerFleet(req.user!.id, req.body);
-  sendSuccess(res, fleet, 201);
-}));
-
-// Profile
-router.get('/me', authorize(UserRole.FLEET_MANAGER), asyncHandler(async (req: Request, res: Response) => {
-  const fleet = await driverService.getFleetProfile(req.user!.id);
-  sendSuccess(res, fleet);
-}));
-
-// Driver management
-router.post('/drivers', authorize(UserRole.FLEET_MANAGER), validate(addFleetDriverSchema), asyncHandler(async (req: Request, res: Response) => {
-  const fleet = await driverService.getFleetProfile(req.user!.id);
-  const result = await driverService.addFleetDriver(fleet.id, req.body.driverUserId, req.body.earningsSplit);
-  sendSuccess(res, result);
-}));
-
-router.delete('/drivers/:driverUserId', authorize(UserRole.FLEET_MANAGER), asyncHandler(async (req: Request, res: Response) => {
-  const fleet = await driverService.getFleetProfile(req.user!.id);
-  const result = await driverService.removeFleetDriver(fleet.id, req.params.driverUserId);
-  sendSuccess(res, result);
-}));
+router.post('/register', validate(schemas.registerFleetSchema), async (req, res, next) => {
+  try { const result = await driverService.registerFleet(req.user!.id, req.body); sendSuccess(res, result, 201); } catch (e) { next(e); }
+});
+router.get('/me', authorize(UserRole.FLEET_MANAGER), async (req, res, next) => {
+  try { const result = await driverService.getFleetProfile(req.user!.id); sendSuccess(res, result); } catch (e) { next(e); }
+});
+router.post('/drivers', authorize(UserRole.FLEET_MANAGER), validate(schemas.addFleetDriverSchema), async (req, res, next) => {
+  try { const fleet = await driverService.getFleetProfile(req.user!.id); const result = await driverService.addFleetDriver(fleet.id, req.body.driverUserId, req.body.earningsSplit); sendSuccess(res, result); } catch (e) { next(e); }
+});
+router.delete('/drivers/:driverUserId', authorize(UserRole.FLEET_MANAGER), async (req, res, next) => {
+  try { const fleet = await driverService.getFleetProfile(req.user!.id); const result = await driverService.removeFleetDriver(fleet.id, req.params.driverUserId); sendSuccess(res, result); } catch (e) { next(e); }
+});
 
 export default router;
