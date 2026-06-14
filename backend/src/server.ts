@@ -3,6 +3,8 @@ import { config } from './config/env';
 import { connectRedis } from './config/redis';
 import { prisma } from './config/database';
 import { logger } from './utils/logger';
+import { setupSocket } from './sockets';
+import { schedulerService } from './services/scheduler.service';
 
 async function bootstrap() {
   try {
@@ -24,9 +26,18 @@ async function bootstrap() {
       logger.info(`Server running on http://${config.HOST}:${config.PORT}`);
     });
 
+    // Setup WebSocket
+    setupSocket(server);
+
+    // Start background jobs
+    if (config.NODE_ENV === 'production') {
+      schedulerService.start();
+    }
+
     // Graceful shutdown
     const shutdown = async (signal: string) => {
       logger.info(`Received ${signal}, shutting down gracefully...`);
+      schedulerService.stop();
       server.close(async () => {
         await prisma.$disconnect();
         process.exit(0);
