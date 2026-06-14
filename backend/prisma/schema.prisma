@@ -1,0 +1,1083 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ──────────────────────────────────────
+// ENUMS
+// ──────────────────────────────────────
+
+enum UserRole {
+  CUSTOMER
+  SHOP_OWNER
+  VENDOR_ADMIN
+  INDIVIDUAL_DRIVER
+  FLEET_DRIVER
+  FLEET_MANAGER
+  SYSTEM_ADMIN
+  SUPPORT_ADMIN
+  FINANCE_ADMIN
+  CONTENT_ADMIN
+  ANALYTICS_ADMIN
+}
+
+enum OrderStatus {
+  PENDING_PAYMENT
+  CONFIRMED
+  RESTAURANT_ACCEPTED
+  PREPARING
+  READY_FOR_PICKUP
+  PICKED_UP
+  OUT_FOR_DELIVERY
+  ARRIVED_AT_DESTINATION
+  DELIVERED
+  CANCELLED
+  REFUNDED
+  FAILED
+  AUTO_COMPLETED
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+enum PaymentMethod {
+  CARD
+  WALLET
+  COD
+  SPLIT
+}
+
+enum DriverStatus {
+  OFFLINE
+  ONLINE_IDLE
+  EN_ROUTE_TO_RESTAURANT
+  WAITING_AT_RESTAURANT
+  EN_ROUTE_TO_CUSTOMER
+  RETURNING
+}
+
+enum DriverApprovalStatus {
+  PENDING_DOCUMENTS
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum DisputeStatus {
+  OPEN
+  UNDER_REVIEW
+  RESOLVED
+  APPEALED
+  CLOSED
+}
+
+enum DisputeType {
+  WRONG_ITEM
+  MISSING_ITEM
+  QUALITY_COMPLAINT
+  LATE_DELIVERY
+  DAMAGED_ON_ARRIVAL
+  DRIVER_BEHAVIOR
+  BILLING_DISPUTE
+}
+
+enum NotificationChannel {
+  PUSH
+  EMAIL
+  SMS
+  IN_APP
+}
+
+enum NotificationEvent {
+  ORDER_CONFIRMED
+  ORDER_STATUS_CHANGE
+  DRIVER_ASSIGNED
+  DRIVER_NEARBY
+  ORDER_DELIVERED
+  PROMO_AVAILABLE
+  RATING_REMINDER
+  PAYOUT_PROCESSED
+  TIP_RECEIVED
+  DISPUTE_UPDATE
+  DOCUMENT_EXPIRING
+  PERFORMANCE_ALERT
+}
+
+enum LoyaltyTier {
+  BRONZE
+  SILVER
+  GOLD
+  PLATINUM
+}
+
+enum VendorApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum MenuItemAvailability {
+  AVAILABLE
+  SOLD_OUT
+  HIDDEN
+}
+
+// ──────────────────────────────────────
+// USER & AUTH
+// ──────────────────────────────────────
+
+model User {
+  id             String    @id @default(uuid())
+  email          String    @unique
+  phone          String?
+  passwordHash   String
+  firstName      String
+  lastName       String
+  role           UserRole  @default(CUSTOMER)
+  isEmailVerified Boolean @default(false)
+  isPhoneVerified Boolean @default(false)
+  avatarUrl      String?
+  isActive       Boolean   @default(true)
+  failedLoginAttempts Int  @default(0)
+  lockedUntil    DateTime?
+  lastLoginAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  // Relations
+  addresses         Address[]
+  refreshTokens     RefreshToken[]
+  carts             Cart[]
+  orders            Order[]           @relation("CustomerOrders")
+  ratings           Rating[]          @relation("UserRatings")
+  notifications     Notification[]
+  notificationPrefs NotificationPreference[]
+  tasteProfile      TasteProfile?
+  loyaltyAccount    LoyaltyAccount?
+  disputes          Dispute[]         @relation("Disputant")
+  disputeMessages   DisputeMessage[]
+  searchHistory     UserSearchHistory[]
+  browsingActivity  UserBrowsingActivity[]
+  wallet            Wallet?
+  driver            IndividualDriver? @relation("UserDriver")
+  vendor            Vendor?           @relation("VendorOwner")
+  ownedBranches     Branch[]          @relation("BranchOwner")
+  auditLogs         AuditLog[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  userAgent String?
+  ipAddress String?
+  isRevoked Boolean  @default(false)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+  @@map("refresh_tokens")
+}
+
+// ──────────────────────────────────────
+// ADDRESS
+// ──────────────────────────────────────
+
+model Address {
+  id          String  @id @default(uuid())
+  userId      String
+  label       String? // "Home", "Work", etc.
+  street      String
+  building    String?
+  apartment   String?
+  floor       String?
+  landmark    String?
+  city        String
+  state       String?
+  country     String  @default("US")
+  postalCode  String?
+  latitude    Float
+  longitude   Float
+  googlePlaceId String?
+  isDefault   Boolean @default(false)
+  deliveryNotes String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("addresses")
+}
+
+// ──────────────────────────────────────
+// VENDOR & BRANCH
+// ──────────────────────────────────────
+
+model Vendor {
+  id                 String   @id @default(uuid())
+  ownerId            String   @unique
+  brandName          String
+  brandLogoUrl       String?
+  brandWebsite       String?
+  description        String?
+  businessRegistration String?
+  taxId              String?
+  bankAccountInfo    Json?
+  commissionPercent  Float    @default(15.0)
+  commissionType     String   @default("percentage") // percentage | flat | tiered
+  approvalStatus     VendorApprovalStatus @default(PENDING)
+  supportEmail       String?
+  supportPhone       String?
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  owner    User       @relation("VendorOwner", fields: [ownerId], references: [id])
+  branches Branch[]
+
+  @@map("vendors")
+}
+
+model Branch {
+  id               String   @id @default(uuid())
+  vendorId         String
+  ownerId          String?  // If single-shop-owner, directly linked
+  name             String
+  slug             String   @unique
+  description      String?
+  coverImageUrl    String?
+  logoUrl          String?
+  phone            String?
+  email            String?
+  street           String
+  city             String
+  state            String?
+  country          String   @default("US")
+  postalCode       String?
+  latitude         Float
+  longitude        Float
+  googlePlaceId    String?
+  cuisineTags      String[] // ["italian", "pizza"]
+  isOpen           Boolean  @default(true)
+  isAcceptingOrders Boolean @default(true)
+  acceptsPreOrders Boolean  @default(false)
+  acceptsCOD       Boolean  @default(false)
+  estimatedPrepTimeMin Int  @default(20)
+  minimumOrderAmount Float  @default(0)
+  deliveryFee      Float    @default(0)
+  maxOrderCapacity Int?     // Max orders per day, null = unlimited
+  rating           Float    @default(0)
+  ratingCount      Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  vendor         Vendor           @relation(fields: [vendorId], references: [id])
+  owner          User?            @relation("BranchOwner", fields: [ownerId], references: [id])
+  menuCategories MenuCategory[]
+  operatingHours OperatingHour[]
+  serviceableZones ServiceableZone[]
+  preOrderSlots  PreOrderSlot[]
+  orders         Order[]          @relation("BranchOrders")
+
+  @@index([vendorId])
+  @@index([slug])
+  @@index([latitude, longitude])
+  @@map("branches")
+}
+
+model OperatingHour {
+  id         String   @id @default(uuid())
+  branchId   String
+  dayOfWeek  Int      // 0=Sunday, 1=Monday, ..., 6=Saturday
+  openTime   String   // "09:00"
+  closeTime  String   // "22:00"
+  isClosed   Boolean  @default(false)
+  dateOverride DateTime? // Specific date override (for holidays)
+
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@unique([branchId, dayOfWeek, dateOverride])
+  @@map("operating_hours")
+}
+
+model ServiceableZone {
+  id           String  @id @default(uuid())
+  branchId     String
+  name         String  // "Downtown", "Uptown"
+  geoJson      Json    // GeoJSON Polygon
+  minOrderAmount Float? // Override minimum order for this zone
+  deliveryFeeOverride Float? // Override delivery fee for this zone
+  estimatedDeliveryMin Int? // Override ETA for this zone
+  isActive     Boolean @default(true)
+  createdAt    DateTime @default(now())
+
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@index([branchId])
+  @@map("serviceable_zones")
+}
+
+// ──────────────────────────────────────
+// MENU
+// ──────────────────────────────────────
+
+model MenuCategory {
+  id        String  @id @default(uuid())
+  branchId  String
+  name      String
+  sortOrder Int     @default(0)
+  isActive  Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  branch Branch  @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  items  MenuItem[]
+
+  @@unique([branchId, name])
+  @@map("menu_categories")
+}
+
+model MenuItem {
+  id              String   @id @default(uuid())
+  categoryId      String
+  name            String
+  description     String?
+  price           Float
+  compareAtPrice  Float?   // Original price for discount display
+  imageUrls       String[]
+  dietaryTags     String[] // ["vegan", "gluten-free", "halal"]
+  allergenInfo    String[] // ["peanuts", "shellfish"]
+  spiceLevel      Int?     // 1-5
+  preparationTime Int?     // Override in minutes
+  isAvailable     Boolean   @default(true)
+  availability    MenuItemAvailability @default(AVAILABLE)
+  isPopular       Boolean   @default(false)
+  isFeatured      Boolean   @default(false)
+  sortOrder       Int       @default(0)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  category       MenuCategory    @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  modifierGroups ModifierGroup[]
+  cartItems      CartItem[]
+
+  @@index([categoryId])
+  @@map("menu_items")
+}
+
+model ModifierGroup {
+  id            String  @id @default(uuid())
+  menuItemId    String
+  name          String
+  selectionRule String  @default("single") // single | multi | required_single | required_multi
+  isRequired    Boolean @default(false)
+  sortOrder     Int     @default(0)
+  createdAt     DateTime @default(now())
+
+  menuItem MenuItem        @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  options  ModifierOption[]
+
+  @@index([menuItemId])
+  @@map("modifier_groups")
+}
+
+model ModifierOption {
+  id              String  @id @default(uuid())
+  modifierGroupId String
+  name            String
+  price           Float   @default(0)
+  isDefault       Boolean @default(false)
+  isAvailable     Boolean @default(true)
+  sortOrder       Int     @default(0)
+  createdAt       DateTime @default(now())
+
+  modifierGroup ModifierGroup @relation(fields: [modifierGroupId], references: [id], onDelete: Cascade)
+
+  @@index([modifierGroupId])
+  @@map("modifier_options")
+}
+
+// ──────────────────────────────────────
+// CART
+// ──────────────────────────────────────
+
+model Cart {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  branchId    String?
+  couponId    String?
+  discountAmount Float? @default(0)
+  expiresAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user  User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items CartItem[]
+
+  @@map("carts")
+}
+
+model CartItem {
+  id         String  @id @default(uuid())
+  cartId     String
+  menuItemId String
+  quantity   Int     @default(1)
+  unitPrice  Float   // Snapshot of price at time of adding
+  specialInstructions String?
+  createdAt  DateTime @default(now())
+
+  cart      Cart                  @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  menuItem  MenuItem              @relation(fields: [menuItemId], references: [id])
+  modifiers CartItemModifier[]
+
+  @@index([cartId])
+  @@map("cart_items")
+}
+
+model CartItemModifier {
+  id               String @id @default(uuid())
+  cartItemId       String
+  modifierOptionId String
+  modifierGroupId  String
+  name             String // Snapshot of modifier name
+  price            Float  // Snapshot of modifier price
+
+  cartItem CartItem @relation(fields: [cartItemId], references: [id], onDelete: Cascade)
+
+  @@index([cartItemId])
+  @@map("cart_item_modifiers")
+}
+
+// ──────────────────────────────────────
+// ORDER
+// ──────────────────────────────────────
+
+model Order {
+  id               String   @id @default(uuid())
+  orderNumber      String   @unique // Human-readable: "ORD-20241015-XXXX"
+  customerId       String
+  branchId         String
+  driverId         String?
+  status           OrderStatus @default(PENDING_PAYMENT)
+  subtotal         Float
+  deliveryFee      Float
+  serviceFee       Float
+  taxAmount        Float
+  discountAmount   Float    @default(0)
+  tipAmount        Float    @default(0)
+  totalAmount      Float
+  couponId         String?
+  paymentMethod    PaymentMethod?
+  deliveryAddress  Json     // Snapshot of address at time of order
+  deliveryLat      Float?
+  deliveryLng      Float?
+  deliveryNotes    String?
+  estimatedDeliveryAt DateTime?
+  actualDeliveredAt  DateTime?
+  customerNotes    String?
+  isScheduled      Boolean  @default(false)
+  scheduledFor     DateTime?
+  idempotencyKey   String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  customer      User              @relation("CustomerOrders", fields: [customerId], references: [id])
+  branch        Branch            @relation("BranchOrders", fields: [branchId], references: [id])
+  items         OrderItem[]
+  statusHistory OrderStatusHistory[]
+  payment       PaymentTransaction?
+  ratings       Rating[]
+  disputes      Dispute[]
+
+  @@index([customerId])
+  @@index([branchId])
+  @@index([driverId])
+  @@index([status])
+  @@index([idempotencyKey])
+  @@index([orderNumber])
+  @@map("orders")
+}
+
+model OrderItem {
+  id         String  @id @default(uuid())
+  orderId    String
+  menuItemId String?
+  name       String  // Snapshot
+  quantity   Int
+  unitPrice  Float   // Snapshot
+  totalPrice Float
+  specialInstructions String?
+
+  order     Order                @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  modifiers OrderItemModifier[]
+
+  @@index([orderId])
+  @@map("order_items")
+}
+
+model OrderItemModifier {
+  id              String @id @default(uuid())
+  orderItemId     String
+  modifierGroupId String?
+  modifierOptionId String?
+  name            String  // Snapshot
+  price           Float   // Snapshot
+
+  orderItem OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+
+  @@index([orderItemId])
+  @@map("order_item_modifiers")
+}
+
+model OrderStatusHistory {
+  id        String      @id @default(uuid())
+  orderId   String
+  fromStatus OrderStatus?
+  toStatus  OrderStatus
+  changedBy String?     // userId or "system" or "customer"
+  reason    String?     // For cancellations/rejections
+  createdAt DateTime    @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([createdAt])
+  @@map("order_status_history")
+}
+
+// ──────────────────────────────────────
+// PAYMENT
+// ──────────────────────────────────────
+
+model PaymentTransaction {
+  id                String        @id @default(uuid())
+  orderId           String        @unique
+  stripePaymentIntentId String?   @unique
+  amount            Float
+  currency          String        @default("usd")
+  status            PaymentStatus @default(PENDING)
+  paymentMethod     PaymentMethod
+  gatewayResponse   Json?
+  failureReason     String?
+  paidAt            DateTime?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  order   Order    @relation(fields: [orderId], references: [id])
+  refunds Refund[]
+
+  @@map("payment_transactions")
+}
+
+model Refund {
+  id              String        @id @default(uuid())
+  paymentId       String
+  amount          Float
+  reason          String?
+  stripeRefundId  String?       @unique
+  status          PaymentStatus @default(PENDING)
+  createdAt       DateTime      @default(now())
+
+  payment PaymentTransaction @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  @@index([paymentId])
+  @@map("refunds")
+}
+
+// ──────────────────────────────────────
+// WALLET
+// ──────────────────────────────────────
+
+model Wallet {
+  id        String  @id @default(uuid())
+  userId    String  @unique
+  balance   Float   @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions WalletTransaction[]
+
+  @@map("wallets")
+}
+
+model WalletTransaction {
+  id          String   @id @default(uuid())
+  walletId    String
+  amount      Float    // Positive = credit, negative = debit
+  type        String   // topup | order_payment | refund | withdrawal | bonus
+  referenceId String?  // Order ID, payment ID, etc.
+  description String?
+  balanceAfter Float
+  createdAt   DateTime @default(now())
+
+  wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@index([walletId])
+  @@map("wallet_transactions")
+}
+
+// ──────────────────────────────────────
+// DRIVERS & FLEET
+// ──────────────────────────────────────
+
+model IndividualDriver {
+  id              String   @id @default(uuid())
+  userId          String   @unique
+  vehicleType     String   // car | motorcycle | bicycle | scooter
+  vehicleMake     String?
+  vehicleModel    String?
+  vehicleColor    String?
+  vehiclePlate    String?
+  status          DriverStatus @default(OFFLINE)
+  approvalStatus  DriverApprovalStatus @default(PENDING_DOCUMENTS)
+  fleetId         String?
+  earningsSplit   Float?   // Percentage if fleet driver (e.g., 70)
+  currentLocationLat  Float?
+  currentLocationLng  Float?
+  currentLocationUpdatedAt DateTime?
+  currentDeliveryId  String?
+  acceptanceRate  Float    @default(0)
+  completionRate  Float    @default(0)
+  rating          Float    @default(0)
+  totalDeliveries Int      @default(0)
+  totalEarnings   Float    @default(0)
+  isAvailable     Boolean  @default(false)
+  maxDeliveryDistanceKm Float @default(10)
+  autoAccept      Boolean  @default(false)
+  acceptsNightDelivery Boolean @default(false)
+  preferredZones  String[] // Zone IDs
+  shiftStartAt    DateTime?
+  shiftEndAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user         User               @relation("UserDriver", fields: [userId], references: [id])
+  fleet        FleetCompany?      @relation(fields: [fleetId], references: [id])
+  sessions     DriverSession[]
+  documents    DriverDocument[]
+
+  @@index([fleetId])
+  @@index([status])
+  @@index([currentLocationLat, currentLocationLng])
+  @@map("individual_drivers")
+}
+
+model FleetCompany {
+  id                  String   @id @default(uuid())
+  companyName         String
+  registrationNumber  String   @unique
+  taxId               String?
+  insuranceCertificate String?
+  businessLicense     String?
+  contactName         String
+  contactEmail        String
+  contactPhone        String
+  bankAccountInfo     Json?
+  maxDrivers          Int      @default(50)
+  defaultEarningsSplit Float   @default(70) // Default 70% to driver
+  isApproved          Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  drivers IndividualDriver[]
+
+  @@map("fleet_companies")
+}
+
+model DriverSession {
+  id          String       @id @default(uuid())
+  driverId    String
+  status      DriverStatus
+  startedAt   DateTime     @default(now())
+  endedAt     DateTime?
+  durationMin Int?
+  earnings    Float        @default(0)
+  deliveriesCompleted Int @default(0)
+
+  driver IndividualDriver @relation(fields: [driverId], references: [id], onDelete: Cascade)
+
+  @@index([driverId, startedAt])
+  @@map("driver_sessions")
+}
+
+model DriverDocument {
+  id         String   @id @default(uuid())
+  driverId   String
+  type       String   // license_front | license_back | insurance | registration | background_check | profile_photo
+  fileUrl    String
+  status     String   // pending | approved | rejected | expiring_soon | expired
+  expiryDate DateTime?
+  rejectionReason String?
+  uploadedAt DateTime @default(now())
+  reviewedAt DateTime?
+
+  driver IndividualDriver @relation(fields: [driverId], references: [id], onDelete: Cascade)
+
+  @@index([driverId])
+  @@map("driver_documents")
+}
+
+model DriverLocation {
+  id        String   @id @default(uuid())
+  driverId  String
+  latitude  Float
+  longitude Float
+  bearing   Float?
+  speed     Float?
+  accuracy  Float?
+  batteryLevel Float?
+  state     DriverStatus
+  recordedAt DateTime @default(now())
+
+  @@index([driverId, recordedAt])
+  @@index([recordedAt])
+  @@map("driver_locations")
+}
+
+// ──────────────────────────────────────
+// RATINGS
+// ──────────────────────────────────────
+
+model Rating {
+  id           String   @id @default(uuid())
+  orderId      String
+  userId       String
+  targetType   String   // restaurant | driver
+  targetId     String   // branchId or driverId
+  score        Int      // 1-5
+  review       String?
+  tags         String[] // ["fast_delivery", "great_food", "friendly"]
+  createdAt    DateTime @default(now())
+
+  order Order @relation(fields: [orderId], references: [id])
+  user  User  @relation("UserRatings", fields: [userId], references: [id])
+
+  @@unique([orderId, userId, targetType, targetId])
+  @@index([targetId])
+  @@map("ratings")
+}
+
+// ──────────────────────────────────────
+// COUPONS
+// ──────────────────────────────────────
+
+model Coupon {
+  id              String   @id @default(uuid())
+  code            String   @unique
+  description     String?
+  discountType    String   // percentage | fixed_amount | free_delivery
+  discountValue   Float
+  minOrderAmount  Float?
+  maxDiscount     Float?
+  usageLimit      Int?
+  usageCount      Int      @default(0)
+  perUserLimit    Int      @default(1)
+  applicableCuisineTags String[] @default([])
+  applicableBranchIds   String[] @default([])
+  startsAt        DateTime
+  expiresAt       DateTime
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+
+  usages CouponUsage[]
+
+  @@map("coupons")
+}
+
+model CouponUsage {
+  id        String   @id @default(uuid())
+  couponId  String
+  userId    String
+  orderId   String?
+  usedAt    DateTime @default(now())
+
+  coupon Coupon @relation(fields: [couponId], references: [id], onDelete: Cascade)
+
+  @@unique([couponId, userId])
+  @@index([couponId])
+  @@map("coupon_usages")
+}
+
+// ──────────────────────────────────────
+// NOTIFICATIONS
+// ──────────────────────────────────────
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  type      NotificationEvent
+  title     String
+  body      String
+  data      Json?    // Extra payload for deep linking
+  isRead    Boolean  @default(false)
+  readAt    DateTime?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("notifications")
+}
+
+model NotificationPreference {
+  id      String             @id @default(uuid())
+  userId  String
+  event   NotificationEvent
+  channel NotificationChannel
+  enabled Boolean            @default(true)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, event, channel])
+  @@map("notification_preferences")
+}
+
+// ──────────────────────────────────────
+// TASTE & RECOMMENDATION
+// ──────────────────────────────────────
+
+model TasteProfile {
+  id              String   @id @default(uuid())
+  userId          String   @unique
+  cuisineAffinities  Json? // { "italian": 0.9, "sushi": 0.3 }
+  dietaryRestrictions String[] // ["vegan", "gluten-free"]
+  allergens       String[] // ["peanuts"]
+  spiceTolerance  Int?     // 1-5
+  priceSensitivity String? // budget | mid | premium
+  dislikedTags    String[] // Cuisines/dishes user marked "not interested"
+  favoriteItemIds String[] // MenuItem IDs
+  tasteVector     Float[]  @default([]) // ML embedding
+  lastUpdated     DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("taste_profiles")
+}
+
+model UserSearchHistory {
+  id        String   @id @default(uuid())
+  userId    String
+  query     String
+  resultCount Int?
+  clickedItemId String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("user_search_history")
+}
+
+model UserBrowsingActivity {
+  id         String   @id @default(uuid())
+  userId     String
+  resourceType String // restaurant | menu_item | cuisine
+  resourceId String
+  timeSpentSec Int?
+  action     String   // view | click | add_to_cart | share
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("user_browsing_activity")
+}
+
+model RecommendationCache {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  data      Json     // Pre-computed recommendations
+  version   Int      @default(1)
+  computedAt DateTime @default(now())
+  expiresAt DateTime
+
+  @@map("recommendation_cache")
+}
+
+// ──────────────────────────────────────
+// LOYALTY
+// ──────────────────────────────────────
+
+model LoyaltyAccount {
+  id              String      @id @default(uuid())
+  userId          String      @unique
+  points          Int         @default(0)
+  lifetimePoints  Int         @default(0)
+  tier            LoyaltyTier @default(BRONZE)
+  tierStartedAt   DateTime?
+  totalOrders     Int         @default(0)
+  totalSpent      Float       @default(0)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions LoyaltyTransaction[]
+
+  @@map("loyalty_accounts")
+}
+
+model LoyaltyTransaction {
+  id           String   @id @default(uuid())
+  accountId    String
+  points       Int      // Positive = earned, Negative = redeemed/expired
+  type         String   // earned | redeemed | expired | bonus | adjustment
+  referenceId  String?  // Order ID, reward ID
+  description  String?
+  balanceAfter Int
+  expiresAt    DateTime? // Points expiry date
+  createdAt    DateTime @default(now())
+
+  account LoyaltyAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+  @@map("loyalty_transactions")
+}
+
+// ──────────────────────────────────────
+// DISPUTES
+// ──────────────────────────────────────
+
+model Dispute {
+  id          String        @id @default(uuid())
+  orderId     String
+  userId      String
+  type        DisputeType
+  status      DisputeStatus @default(OPEN)
+  description String
+  evidenceUrls String[]
+  assignedTo  String?       // Admin user ID
+  resolution  String?       // Resolution details
+  refundAmount Float?
+  resolvedAt  DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  order    Order           @relation(fields: [orderId], references: [id])
+  user     User            @relation("Disputant", fields: [userId], references: [id])
+  messages DisputeMessage[]
+
+  @@index([orderId])
+  @@index([userId])
+  @@index([status])
+  @@map("disputes")
+}
+
+model DisputeMessage {
+  id         String   @id @default(uuid())
+  disputeId  String
+  senderId   String
+  message    String
+  attachmentUrls String[]
+  createdAt  DateTime @default(now())
+
+  dispute Dispute @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+  sender  User    @relation(fields: [senderId], references: [id])
+
+  @@index([disputeId])
+  @@map("dispute_messages")
+}
+
+// ──────────────────────────────────────
+// INVOICES
+// ──────────────────────────────────────
+
+model Invoice {
+  id          String   @id @default(uuid())
+  orderId     String   @unique
+  invoiceNumber String  @unique
+  userId      String?
+  vendorId    String?
+  businessTaxId String?
+  subtotal    Float
+  taxAmount   Float
+  taxRate     Float
+  taxBreakdown Json?   // Per-item/per-jurisdiction tax breakdown
+  totalAmount Float
+  isB2B       Boolean  @default(false)
+  pdfUrl      String?
+  createdAt   DateTime @default(now())
+
+  @@index([vendorId])
+  @@index([userId])
+  @@index([invoiceNumber])
+  @@map("invoices")
+}
+
+// ──────────────────────────────────────
+// PRE-ORDERS
+// ──────────────────────────────────────
+
+model PreOrderSlot {
+  id          String   @id @default(uuid())
+  branchId    String
+  date        DateTime // Date only
+  startTime   String   // "10:00"
+  endTime     String   // "10:30"
+  maxOrders   Int      @default(5)
+  currentOrders Int    @default(0)
+  isAvailable Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@unique([branchId, date, startTime])
+  @@map("pre_order_slots")
+}
+
+// ──────────────────────────────────────
+// ANALYTICS & OPERATIONS
+// ──────────────────────────────────────
+
+model SurgePricingEvent {
+  id         String   @id @default(uuid())
+  zoneId     String?
+  region     String?  // City/district name
+  multiplier Float    // 1.0 - 2.5
+  reason     String?  // high_demand | low_driver_supply | event
+  startedAt  DateTime
+  endedAt    DateTime?
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  @@index([zoneId, startedAt])
+  @@map("surge_pricing_events")
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  adminId     String
+  action      String   // user_suspended | restaurant_approved | payout_processed
+  resourceType String  // user | branch | driver | order | payout
+  resourceId  String?
+  oldValue    Json?
+  newValue    Json?
+  ipAddress   String?
+  createdAt   DateTime @default(now())
+
+  admin User @relation(fields: [adminId], references: [id])
+
+  @@index([adminId])
+  @@index([resourceType, resourceId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}

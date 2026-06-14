@@ -1,0 +1,2 @@
+This directory stores uploaded files in local development.
+In production, files are stored on S3-compatible storage.

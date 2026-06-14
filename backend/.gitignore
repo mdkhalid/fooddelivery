@@ -1,0 +1,50 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+
+# Environment
+.env
+.env.local
+.env.production
+
+# IDE & Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Command Code (AI config)
+.commandcode/
+
+# Logs
+*.log
+logs/
+
+# Uploads (local dev)
+uploads/*
+!uploads/.gitkeep
+
+# Database
+prisma/*.db
+prisma/*.db-journal
+
+# Test coverage
+coverage/
+
+# Temp
+tmp/
+temp/
+
+# Docker
+.docker/
+
+# PM2
+.pm2/
