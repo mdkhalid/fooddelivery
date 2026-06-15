@@ -1,0 +1,99 @@
+import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
+import { API_BASE_URL, API_TIMEOUT } from '../utils/constants';
+import { mmkvStorage, StorageKeys } from '../utils/storage';
+
+const api = axios.create({
+  baseURL: API_BASE_URL,
+  timeout: API_TIMEOUT,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+api.interceptors.request.use(
+  (config: InternalAxiosRequestConfig) => {
+    const token = mmkvStorage.getString(StorageKeys.AUTH_TOKEN);
+    if (token && config.headers) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
+let isRefreshing = false;
+let failedQueue: Array<{
+  resolve: (value: unknown) => void;
+  reject: (reason?: unknown) => void;
+}> = [];
+
+const processQueue = (error: AxiosError | null, token: string | null = null) => {
+  failedQueue.forEach((prom) => {
+    if (error) {
+      prom.reject(error);
+    } else {
+      prom.resolve(token);
+    }
+  });
+  failedQueue = [];
+};
+
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const originalRequest = error.config;
+
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      if (isRefreshing) {
+        return new Promise((resolve, reject) => {
+          failedQueue.push({ resolve, reject });
+        })
+          .then((token) => {
+            originalRequest.headers.Authorization = `Bearer ${token}`;
+            return api(originalRequest);
+          })
+          .catch((err) => Promise.reject(err));
+      }
+
+      originalRequest._retry = true;
+      isRefreshing = true;
+
+      const refreshToken = mmkvStorage.getString(StorageKeys.REFRESH_TOKEN);
+      if (!refreshToken) {
+        mmkvStorage.delete(StorageKeys.AUTH_TOKEN);
+        mmkvStorage.delete(StorageKeys.REFRESH_TOKEN);
+        mmkvStorage.delete(StorageKeys.USER_DATA);
+        isRefreshing = false;
+        return Promise.reject(error);
+      }
+
+      try {
+        const response = await axios.post(`${API_BASE_URL}/auth/refresh`, {
+          refreshToken,
+        });
+
+        const { accessToken, refreshToken: newRefreshToken } = response.data.data;
+        mmkvStorage.setString(StorageKeys.AUTH_TOKEN, accessToken);
+        mmkvStorage.setString(StorageKeys.REFRESH_TOKEN, newRefreshToken);
+
+        processQueue(null, accessToken);
+        originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+        return api(originalRequest);
+      } catch (refreshError) {
+        processQueue(refreshError as AxiosError, null);
+        mmkvStorage.delete(StorageKeys.AUTH_TOKEN);
+        mmkvStorage.delete(StorageKeys.REFRESH_TOKEN);
+        mmkvStorage.delete(StorageKeys.USER_DATA);
+        return Promise.reject(refreshError);
+      } finally {
+        isRefreshing = false;
+      }
+    }
+
+    return Promise.reject(error);
+  }
+);
+
+export default api;
