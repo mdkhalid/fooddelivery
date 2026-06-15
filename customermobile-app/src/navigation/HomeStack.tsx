@@ -3,6 +3,7 @@ import { createStackNavigator } from '@react-navigation/stack';
 import { HomeStackParamList } from '../types/navigation.types';
 import { HomeScreen } from '../screens/HomeScreen';
 import { RestaurantDetailScreen } from '../screens/Restaurant/RestaurantDetailScreen';
+import { MenuScreen } from '../screens/Restaurant/MenuScreen';
 import { CartScreen } from '../screens/Cart/CartScreen';
 import { CheckoutScreen } from '../screens/Cart/CheckoutScreen';
 
@@ -17,6 +18,7 @@ export const HomeStack: React.FC = () => {
     >
       <Stack.Screen name="Home" component={HomeScreen} />
       <Stack.Screen name="RestaurantDetail" component={RestaurantDetailScreen} />
+      <Stack.Screen name="Menu" component={MenuScreen} />
       <Stack.Screen name="Cart" component={CartScreen} />
       <Stack.Screen
         name="Checkout"

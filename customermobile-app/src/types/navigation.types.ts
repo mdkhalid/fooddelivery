@@ -23,6 +23,7 @@ export type MainTabParamList = {
 export type HomeStackParamList = {
   Home: undefined;
   RestaurantDetail: { restaurantId: string };
+  Menu: { restaurantId: string; restaurantName: string };
   Cart: undefined;
   Checkout: undefined;
 };
@@ -55,6 +56,8 @@ export type ProfileStackParamList = {
   DisputeDetail: { disputeId: string };
   Invoice: { orderId: string };
   ScheduledOrders: undefined;
+  Chat: { orderId?: string };
+  HelpCenter: undefined;
 };
 
 declare global {

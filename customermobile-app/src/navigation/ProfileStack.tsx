@@ -16,6 +16,8 @@ import { DisputeListScreen } from '../screens/Profile/DisputeListScreen';
 import { DisputeDetailScreen } from '../screens/Profile/DisputeDetailScreen';
 import { InvoiceScreen } from '../screens/Profile/InvoiceScreen';
 import { ScheduledOrdersScreen } from '../screens/Profile/ScheduledOrdersScreen';
+import { ChatScreen } from '../screens/Support/ChatScreen';
+import { HelpCenterScreen } from '../screens/Support/HelpCenterScreen';
 
 const Stack = createStackNavigator<ProfileStackParamList>();
 
@@ -41,6 +43,8 @@ export const ProfileStack: React.FC = () => {
       <Stack.Screen name="DisputeDetail" component={DisputeDetailScreen} />
       <Stack.Screen name="Invoice" component={InvoiceScreen} />
       <Stack.Screen name="ScheduledOrders" component={ScheduledOrdersScreen} />
+      <Stack.Screen name="Chat" component={ChatScreen} />
+      <Stack.Screen name="HelpCenter" component={HelpCenterScreen} />
     </Stack.Navigator>
   );
 };
